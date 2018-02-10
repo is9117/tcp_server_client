@@ -4,5 +4,8 @@ twisted library([link](https://twistedmatrix.com/trac/)) based tcp server/client
 
 Dependency
 - twisted
-- installation
-  - pip install twisted[tls]
+  - installation: 
+    <pre><code>pip install twisted[tls]</code></pre>
+- mp_manager
+  - [link](https://github.com/is9117/mp_manager)
+
