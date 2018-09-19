@@ -2,7 +2,7 @@
 
 __author__  = "Isaac Park(박이삭)"
 __email__ = "is9117@me.com"
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 ''' 
 === history ===
