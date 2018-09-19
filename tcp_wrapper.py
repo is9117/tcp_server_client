@@ -8,15 +8,18 @@ __version__ = "0.2.0"
 === history ===
 20171212(0.1.0): First draft
 20171228(0.2.0): Result processed through callback, added
+20180404(0.2.1): Bug fix at process_job function
+20180915(0.3.0): Python 3 support added
 ===============
 '''
 
 
-import os
 import time
 import json
 import socket
 import signal
+import random
+import string
 import logging
 import threading
 import traceback
@@ -58,7 +61,7 @@ class PROTOCOL(protocol.Protocol):
     def dataReceived(self, data):
         # print "[PROTOCOL::dataReceived] called", data
         
-        d = threads.deferToThread(self.input_data, data)
+        threads.deferToThread(self.input_data, data)
         
         
             
@@ -71,20 +74,24 @@ class PROTOCOL(protocol.Protocol):
         # result_data = {}
         # check input valid
         try:
-            json_data = json.loads(json_str)
-            sha256 = json_data['sha256']
-            self.result_dict['id'] = sha256
+            json_data = json.loads(json_str.decode('utf-8'))
+            id = json_data['id']
+            self.result_dict['id'] = id
             request_data = json_data['data']
         except:
             self.result_dict['result_code'] = -400
             self.result_dict['result_msg'] = RESULT_CODE_MSG_MAP[-400]
             self.logger.error("[{}] input invalid. tb:{}".format(json_str, traceback.format_exc()))
-            self.send_result(json.dumps(self.result_dict))
+            self.send_result(json.dumps(self.result_dict).encode('utf-8'))
             return
 
         try:
             # generate key
-            key = "{}_{}".format(sha256, str(time.time()))
+            while True:
+                random_str = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(5))
+                key = "{}_{}_{}".format(id, str(time.time()), random_str)
+                if key not in self.protocol_dict:
+                    break
             
             # insert self to protocol dict
             self.protocol_dict[key] = self
@@ -95,11 +102,11 @@ class PROTOCOL(protocol.Protocol):
         except:
             tb = traceback.format_exc()
             self.result_dict = {}
-            self.result_dict['id'] = sha256
+            self.result_dict['id'] = id
             self.result_dict['result_code'] = -500
             self.result_dict['result_msg'] = RESULT_CODE_MSG_MAP[-500]
-            self.logger.error("[{}] internal error. tb:{}".format(sha256, tb))
-            self.send_result(json.dumps(self.result_dict))
+            self.logger.error("[{}] internal error. tb:{}".format(id, tb))
+            self.send_result(json.dumps(self.result_dict).encode('utf-8'))
 
 
     def send_result(self, result_str):
@@ -123,16 +130,14 @@ class PROTOCOL(protocol.Protocol):
             
         except:
             tb = traceback.format_exc()
-            result_dict = {}
-            self.result_dict['id'] = sha256
             self.result_dict['result_code'] = -500
             self.result_dict['result_msg'] = RESULT_CODE_MSG_MAP[-500]
-            self.logger.error("[{}] internal error. tb:{}".format(sha256, tb))
+            self.logger.error("[{}] internal error. tb:{}".format(self.result_dict.get('id', 'None'), tb))
             
-        self.send_result(json.dumps(self.result_dict))
-            
-        
-        
+        self.send_result(json.dumps(self.result_dict).encode('utf-8'))
+
+
+
 
 class FACTORY(protocol.Factory):
 
@@ -292,6 +297,7 @@ class TCP_CLIENT:
     
         self.ip = ip
         self.port = port
+
         self.buf_size = buf_size
         self.timeout = timeout
         # socket.settimeout(timeout)
@@ -299,7 +305,7 @@ class TCP_CLIENT:
 
     """
     Parameter descriptions:
-    sha256:
+    id:
       Unique value for identifing requests.
     request_data:
       For requesting, will be encoded to json string
@@ -309,13 +315,13 @@ class TCP_CLIENT:
       {"result_code": <result_code>, "result_msg":<result_msg>, "result_data":<data returned by the server>}
       For more information about result_code and result_msg, see RESULT_CODE_MSG_MAP
     """
-    def request(self, sha256, request_data):
+    def request(self, id, request_data):
     
         global RESULT_CODE_MSG_MAP
     
         try:
-            json_data = {"sha256": sha256, "data":request_data}
-            json_str = json.dumps(json_data)
+            json_data = {"id": id, "data":request_data}
+            json_str = json.dumps(json_data).encode('utf-8')
         
             # print "start socket"
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -327,7 +333,7 @@ class TCP_CLIENT:
             # print "start recv"
             result = s.recv(self.buf_size)
             # print "got result", result
-            return json.loads(result)
+            return json.loads(result.decode('utf-8'))
             
         except socket.timeout:
             # socket time-out
@@ -335,7 +341,7 @@ class TCP_CLIENT:
             
         except Exception as e:
             traceback.print_exc()
-            print dir(e)
+            # print(dir(e))
             
             errno = 0
             result_code = -400
